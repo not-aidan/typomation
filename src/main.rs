@@ -1,3 +1,4 @@
+use bevy::sprite::Anchor;
 use interpolation::*;
 use std::time::Instant;
 
@@ -7,9 +8,14 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .init_resource::<Animation>()
-        .add_system(transform_track_system)
+        .add_system(transform_track_system.after(pre_animation_system))
+        .add_system(sprite_track_system.after(pre_animation_system))
         .add_startup_system(setup_system)
         .run();
+}
+
+fn pre_animation_system(mut animation: ResMut<Animation>) {
+    animation.duration = Instant::now().duration_since(animation.start).as_secs_f32();
 }
 
 fn setup_system(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -51,6 +57,23 @@ struct TransformTrack {
     scale_z: Track,
 }
 
+#[derive(Component)]
+struct SpriteTrack {
+    color_r: Track,
+    color_g: Track,
+    color_b: Track,
+    color_a: Track,
+    flip_x: BoolTrack,
+    flip_y: BoolTrack,
+    anchor_x: Track,
+    anchor_y: Track,
+}
+
+struct BoolKey {
+    value: bool,
+    duration: Scalar,
+}
+
 struct Key {
     value: Scalar,
     duration: Scalar,
@@ -67,6 +90,11 @@ impl Key {
         }
         previous_key.value.lerp(&self.value, &interpolation)
     }
+}
+
+#[derive(Default)]
+struct BoolTrack {
+    keys: Vec<BoolKey>,
 }
 
 #[derive(Default)]
@@ -99,15 +127,42 @@ impl Track {
     }
 }
 
+impl BoolTrack {
+    fn new(keys: Vec<BoolKey>) -> Self {
+        Self { keys }
+    }
+
+    fn value(&self, mut duration: Scalar) -> Option<bool> {
+        let mut value: Option<bool> = None;
+        let mut keys = self.keys.iter();
+
+        if let Some(mut previous_key) = keys.next() {
+            for key in keys {
+                if duration > key.duration {
+                    duration -= key.duration;
+                    value = Some(key.value);
+                    previous_key = key;
+                    continue;
+                }
+                return Some(previous_key.value);
+            }
+        }
+
+        value
+    }
+}
+
 #[derive(Resource)]
 struct Animation {
     start: Instant,
+    duration: f32,
 }
 
 impl Default for Animation {
     fn default() -> Self {
         Self {
             start: Instant::now(),
+            duration: 0.0,
         }
     }
 }
@@ -116,7 +171,7 @@ fn transform_track_system(
     mut query: Query<(&mut Transform, &TransformTrack)>,
     animation: Res<Animation>,
 ) {
-    let duration = Instant::now().duration_since(animation.start).as_secs_f32();
+    let duration = animation.duration;
     for (mut transform, track) in query.iter_mut() {
         let translation = transform.translation;
         let rotation = transform.rotation;
@@ -140,5 +195,28 @@ fn transform_track_system(
             track.rotation_y.value(duration).unwrap_or(rotation.y),
             track.rotation_z.value(duration).unwrap_or(rotation.z),
         );
+    }
+}
+
+fn sprite_track_system(mut query: Query<(&mut Sprite, &SpriteTrack)>, animation: Res<Animation>) {
+    let duration = animation.duration;
+    for (mut sprite, track) in query.iter_mut() {
+        let color = sprite.color;
+
+        sprite.color = Color::rgba_linear(
+            track.color_r.value(duration).unwrap_or(color.r()),
+            track.color_g.value(duration).unwrap_or(color.g()),
+            track.color_b.value(duration).unwrap_or(color.b()),
+            track.color_a.value(duration).unwrap_or(color.a()),
+        );
+
+        sprite.flip_x = track.flip_x.value(duration).unwrap_or(sprite.flip_x);
+        sprite.flip_y = track.flip_y.value(duration).unwrap_or(sprite.flip_y);
+
+        let anchor = sprite.anchor.as_vec();
+        sprite.anchor = Anchor::Custom(Vec2::new(
+            track.anchor_x.value(duration).unwrap_or(anchor.x),
+            track.anchor_y.value(duration).unwrap_or(anchor.y),
+        ));
     }
 }

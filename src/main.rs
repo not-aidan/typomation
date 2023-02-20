@@ -1,5 +1,5 @@
 use interpolation::*;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use bevy::prelude::*;
 
@@ -24,12 +24,12 @@ fn setup_system(mut commands: Commands, asset_server: Res<AssetServer>) {
                 Key {
                     value: 0.0,
                     duration: 0.0,
-                    ease: EaseFunction::CubicIn,
+                    ease: None,
                 },
                 Key {
                     value: 500.0,
                     duration: 10.0,
-                    ease: EaseFunction::CubicIn,
+                    ease: None,
                 },
             ]),
             ..Default::default()
@@ -54,24 +54,22 @@ struct TransformTrack {
 struct Key {
     value: Scalar,
     duration: Scalar,
-    ease: EaseFunction,
+    ease: Option<EaseFunction>,
 }
 
 impl Key {
     fn interpolate(&self, previous_key: &Self, duration: Scalar) -> Scalar {
-        let lerp = (duration / self.duration).calc(self.ease);
-        let d = duration / self.duration;
-        println!("lerp: {d} -> {lerp}");
-        previous_key.value.lerp(&self.value, &lerp)
+        let interpolation = duration / self.duration;
+        if let Some(ease) = self.ease {
+            return previous_key
+                .value
+                .lerp(&self.value, &interpolation.calc(ease));
+        }
+        previous_key.value.lerp(&self.value, &interpolation)
     }
 }
 
-impl Default for Track {
-    fn default() -> Self {
-        Self { keys: Vec::new() }
-    }
-}
-
+#[derive(Default)]
 struct Track {
     keys: Vec<Key>,
 }
@@ -121,11 +119,26 @@ fn transform_track_system(
     let duration = Instant::now().duration_since(animation.start).as_secs_f32();
     for (mut transform, track) in query.iter_mut() {
         let translation = transform.translation;
+        let rotation = transform.rotation;
+        let scale = transform.scale;
 
         transform.translation = Vec3::new(
             track.position_x.value(duration).unwrap_or(translation.x),
             track.position_y.value(duration).unwrap_or(translation.y),
             track.position_z.value(duration).unwrap_or(translation.z),
+        );
+
+        transform.scale = Vec3::new(
+            track.scale_x.value(duration).unwrap_or(scale.x),
+            track.scale_y.value(duration).unwrap_or(scale.y),
+            track.scale_z.value(duration).unwrap_or(scale.z),
+        );
+
+        transform.rotation = Quat::from_euler(
+            EulerRot::XYZ,
+            track.rotation_x.value(duration).unwrap_or(rotation.x),
+            track.rotation_y.value(duration).unwrap_or(rotation.y),
+            track.rotation_z.value(duration).unwrap_or(rotation.z),
         );
     }
 }

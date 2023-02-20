@@ -1,0 +1,6 @@
+[[entities]]
+[entities.sprite]
+texture = "sprite.png"
+
+[entities.transform2D]
+position = 

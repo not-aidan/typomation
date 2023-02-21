@@ -1,10 +1,4 @@
-use bevy::render::camera::RenderTarget;
-use bevy::render::render_resource::{
-    Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
-};
-use bevy::render::RenderPlugin;
 use bevy::sprite::Anchor;
-use bevy::winit::WinitPlugin;
 use interpolation::*;
 use std::time::Instant;
 
@@ -12,35 +6,13 @@ use bevy::prelude::*;
 
 fn main() {
     let mut app = App::new();
-    app.add_plugins(DefaultPlugins.build().disable::<WinitPlugin>())
+    app.add_plugins(DefaultPlugins)
         .init_resource::<Animation>()
         .add_system(pre_animation_system)
         .add_system(transform_track_system.after(pre_animation_system))
         .add_system(sprite_track_system.after(pre_animation_system))
-        .add_startup_system(setup_system);
-
-    let frames = 100;
-    let mut images = Vec::<Image>::new();
-
-    for _ in 0..frames {
-        app.update();
-        let camera = app
-            .world
-            .query::<&Camera>()
-            .iter(&app.world)
-            .next()
-            .expect("Can't find camera");
-
-        if let RenderTarget::Image(image_handle) = &camera.target {
-            let image = app
-                .world
-                .get_resource::<Assets<Image>>()
-                .expect("Couldn't get image assets")
-                .get(image_handle)
-                .expect("No image found in camera");
-            images.push(image.clone());
-        }
-    }
+        .add_startup_system(setup_system)
+        .run();
 }
 
 fn pre_animation_system(mut animation: ResMut<Animation>) {
@@ -250,4 +222,3 @@ fn sprite_track_system(mut query: Query<(&mut Sprite, &SpriteTrack)>, animation:
         ));
     }
 }
-
